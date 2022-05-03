@@ -1,0 +1,12 @@
+[Unit]
+Description= Lelastic
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/lelastic -dcid 6 -primary -allifs
+ExecReload=/bin/kill -s HUP $MAINPID
+
+[Install]
+WantedBy=multi-user.target
