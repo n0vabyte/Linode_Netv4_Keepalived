@@ -19,7 +19,7 @@ listening on eth0, link-type EN10MB (Ethernet), snapshot length 262144 bytes
 
 # Configuring keepalived and lelastic
 
-The steps outlined in this sections assumes that the customer already configured keepalived and [IP sharing](https://www.linode.com/docs/guides/managing-ip-addresses/#configuring-ip-sharing) between 2 Linodes. During failover testing, we will use the following designations:
+The steps outlined in this sections assumes that the customer already configured keepalived and [IP sharing](https://www.linode.com/docs/guides/managing-ip-addresses/#configuring-ip-sharing) between 2 Linodes. If the keepalived configuration is using `enable_script_security` (recommended) you will need make modifications to the sudoers file. You can read more [here](https://github.com/n0vabyte/Linode_Netv4_Keepalived/blob/main/keepalived_script_security.md). During failover testing, we will use the following designations:
 
 - haproxy1, 192.168.143.227
 - haproxy2, 192.168.143.241
@@ -37,11 +37,14 @@ All actions are going to be done on haproxy1 and haproxy2. The 3rd haproxy node 
 Install lelastic on both Linodes:
 
 ```
-curl -LO https://github.com/linode/lelastic/releases/download/v0.0.5/lelastic.gz
+version=$(curl -sIL "https://github.com/linode/lelastic/releases/latest"  | grep "location:" | awk -F "/" {'print $NF'})
+curl -LO https://github.com/linode/lelastic/releases/download/$version/lelastic.gz
 gunzip lelastic.gz
 chmod 755 lelastic
 sudo mv lelastic /usr/local/bin/
 ```
+
+We want to make sure that we are pulling from latest. If the above fails or changes in the future, please refer to the Linode guide for reference.
 
 2. Next, create the service file for lelastic on both Linodes:
 ```
@@ -66,19 +69,21 @@ WantedBy=multi-user.target
 
 *note*: Make sure that you use the the correct `-dcid` value. This configuration is for the Newark DC which is number 6. Update that value to the DC that you are in. We can use the following info to ge the value belongs to each DC:
 
-```
-4   -     Atlanta (Georgia, USA)
-2   -     Dallas (Texas, USA)
-10  -    Frankfurt (Germany)
-3   -     Fremont (California, USA)
-7   -     London (United Kingdom)
-14  -    Mumbai (India)
-6   -     Newark (New Jersey, USA)
-9   -     Singapore
-16  -    Sydney (Australia)
-11  -    Tokyo (Japan)
-15  -    Toronto (Canada)
-```
+| ID    | Data Center   |
+| :---  | :----         |
+| 4     | Atlanta (Georgia, USA) |
+| 2     | Dallas (Texas, USA) |
+| 10    | Frankfurt (Germany) |
+| 3     | Fremont (California, USA) |
+| 7     | London (United Kingdom) |
+| 14    | Mumbai (India) |
+| 6     | Newark (New Jersey, USA) |
+| 9     | Singapore |
+| 16    | Sydney (Australia) |
+| 11    | Tokyo (Japan)|
+| 15    | Toronto (Canada) |
+
+*NOTE:* Please make sure that the datacenter you are going to use is [supported](https://www.linode.com/docs/guides/ip-failover/#ip-sharing-availability).
 
 4. Start the service on both Linodes
 ```
@@ -132,7 +137,7 @@ function main {
 main $1
 ```
 
-*note*: You can either adopt this method or incorporate into what you already being doing for transitions. An example keepalived.conf is made available under files/keepalived.conf so in case you need a reference.
+*note*: You can either adopt this method or incorporate into what you're already doing for state transitions. An example keepalived.conf is made available under files/keepalived.conf in case you need a reference.
 
 ## Step 3 - Test Failover
 
@@ -259,4 +264,14 @@ We can see that the log file was updated and haproxy2 is now the primary and the
 
 # Disclaimer
 
-Do not run this blindly on a production environment. Changes should be tested/planned on a dev environment before implementation.
+Do not run this blindly on a production environment. Changes should be tested/planned on a staging environment before implementation.
+
+# Security Advisory
+
+In order for IP failover to occure in an unattended manner the notify.sh script needs to be able to restart the lelastic service. For this to happen, we are granting the keepalived_script user passwordless sudo access to systemctl to restart/stop the service.  Be advised that compromise of the keepalived_script user *may* result in priviledge escalation. 
+
+- https://gtfobins.github.io/gtfobins/systemctl/
+
+Upon testing -- the method denoted in GTFOBINS did not successuflly grant priviledge elevation in this scenario. However, you accept and understand that the steps provided in this procedure are provided as-is and does not guarantee a future-bulletproof configuration. 
+
+As an administrator you accept the potential risks of using a passwordless sudo to systemctl otherwise it's the user's responsibility to employ their own solution to accomplish the same results.
